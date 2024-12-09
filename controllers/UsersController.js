@@ -1,7 +1,10 @@
-// controllers/UsersController.js
 import dbClient from '../utils/db.js';
 import redisClient from '../utils/redis.js';
 import sha1 from 'sha1';
+import Queue from 'bull';
+
+// Create the userQueue
+const userQueue = new Queue('userQueue');
 
 class UsersController {
   static async postNew(req, res) {
@@ -21,9 +24,13 @@ class UsersController {
 
     const hashedPassword = sha1(password);
     const newUser = { email, password: hashedPassword };
-    await dbClient.db.collection('users').insertOne(newUser);
+    const result = await dbClient.db.collection('users').insertOne(newUser);
+    const userId = result.insertedId;
 
-    return res.status(201).json({ id: newUser._id, email: newUser.email });
+    // Add job to userQueue for sending welcome email
+    userQueue.add({ userId });
+
+    return res.status(201).json({ id: userId, email });
   }
 
   static async getMe(req, res) {
